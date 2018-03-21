@@ -61,8 +61,11 @@ parameters:
 	newIm.resize((newWidth,newHeight),image.ANTIALIAS).save(arg['dst_img'],quality=arg['save_q'])
 
 def main():
+	with open('../utils/name.txt', 'r') as f :
+		name = f.readlines()
 	num = 0
-	for i in sys.argv[1:] :
+	for i in name:
+		i = i[0:-1]
 		# source image
 		ori_img = i
 		# destine image
@@ -75,7 +78,7 @@ def main():
 
 		clipResizeImg(ori_img=ori_img, dst_img=dst_img, dst_w=dst_w, dst_h=dst_h, save_q=save_q)
 		num = num + 1
-		print('process %s succ! process for %f percents' % (dst_img, num*100.0/len(sys.argv[1:])))
+		print('process %s succ! process for %f percents' % (dst_img, num*100.0/len(name)))
 	return
 
 main()
