@@ -39,6 +39,8 @@ class DataLoader(object):
 					dirlist.append(m)
 				else:
 					filelist.append(m)
+		filelist.sort()
+		dirlist.sort()
 		return dirlist, filelist
 
 	def __init__(self, datadir):
@@ -68,18 +70,22 @@ class DataLoader(object):
 		'''
 	this function aims at get next batch.
 	'''
+		if self.nowpos == len(self.subdirs):
+			print('Attention! Now that, you have read the dataset completely.if you want to read it again, please call obj.reset()!')
+			return None
 		left = self.nowpos
 		right = self.nowpos + batch_size
 		if right>len(self.subdirs):
 			right = self.subdirs
-		label = []
-		img = []
+		label, img, name = [], [], []
 		for i in range(left, right):
 			try:
 				path = self.subdirs[i]
 				_, files = self.get_dirinfo(path)
+				#print(files)
 				# get the ith example label
 				label.append((int)(path[-2:]))
+				name.append(path[-20:])
 				# get the ith example images
 				subdata = []
 				for j in files:
@@ -95,16 +101,24 @@ class DataLoader(object):
 				continue
 			# How to process these exceptions will be disuceesed in future.
 		self.nowpos = right
-		return img, label
+		return img, label, name
 
 	def shuffle(self):
 		'''
 	this function can help you shuffle datasets, after any epoch.
 	'''
+		self.reset()
 		random.shuffle(self.subdirs)
 
+	def reset(self):
+		'''
+	this function can 'reset' the dataset
+		just forget nowpos in datasets.
+	'''
+		self.nowpos = 0
+	
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
 	loader = DataLoader('./video_data')
-	img,label = loader.get_next_batch()
+	img, label, name = loader.get_next_batch()
 	loader.shuffle()
