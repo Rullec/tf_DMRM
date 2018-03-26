@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*- 
 # author: rullec
 # date: 2018/3/20
-# version: v0.1
+# version: v0.3 add assert to make sure the data format	/ v0.2 -- use yield in dataloader
 
 import os
 import sys
@@ -66,43 +66,106 @@ class DataLoader(object):
 		self.subdirs = subdirs
 		self.nowpos = 0
 
-	def get_next_batch(self, batch_size=32):
+	def get_next_batch(self, batch_size=2, datatype='single', simplify = 0.1):
 		'''
 	this function aims at get next batch.
 	'''
+			
+		'''		
 		if self.nowpos == len(self.subdirs):
-			print('Attention! Now that, you have read the dataset completely.if you want to read it again, please call obj.reset()!')
 			return None
 		left = self.nowpos
 		right = self.nowpos + batch_size
 		if right>len(self.subdirs):
 			right = self.subdirs
-		label, img, name = [], [], []
-		for i in range(left, right):
+		'''
+		for i in range(0, len(self.subdirs), batch_size):
 			try:
-				path = self.subdirs[i]
-				_, files = self.get_dirinfo(path)
-				#print(files)
-				# get the ith example label
-				label.append((int)(path[-2:]))
-				name.append(path[-20:])
-				# get the ith example images
-				subdata = []
-				for j in files:
-					if '.jpg'==j[-4:]:
-						jpg = load_img(j)
-						np_image = img_to_array(jpg)
-						subdata.append(np_image)
-						#print(np_image.shape)
-				img.append(subdata)
-				print('load %d sample succ, jpg num is %d.' % (i, len(subdata)))
+				label, img, name = [], [], []
+				for j in range(i, i + batch_size):
+					if j==len(self.subdirs):
+						print('Attention! Now that, you have read the dataset completely.if you want to read it again, the obj will call obj.reset() automatically!')
+						yield img, label, name
+						self.shuffle()
+		
+					path = self.subdirs[j]
+					_, files = self.get_dirinfo(path)
+
+					# simplify - get some key image in video
+					new_files = []
+					for i in xrange(0, int(round(simplify * len(files)))):
+						const = int(round(1.0/simplify))
+						if const * i >= len(files):
+							new_files.append(files[-1])
+						else:
+							new_files.append(files[i * const])
+					files = new_files
+
+					# get the ith example label
+					onehot = np.zeros([1,60],dtype=int)
+					onehot[0, (int)(path[-2:])-1] = 1
+					if datatype!='single':
+						label.append([np.array(onehot) for i in xrange(len(files))])
+					else:
+						[label.append(np.array(onehot)) for i in xrange(len(files))]
+					# get the ith example name
+					name.append(path[-20:])
+
+					# get the ith example images
+					subdata = []
+					for m in files:
+						if '.jpg'==m[-4:]:
+							try:
+								jpg = load_img(m)
+								np_image = np.expand_dims(img_to_array(jpg), axis=0)
+								if datatype=='single':
+									img.append(np_image)
+									subdata.append([])
+								else:
+									subdata.append(np_image)
+							except:
+								traceback.print_exc()
+								continue
+					if 'single'!=datatype:
+						img.append(subdata)
+					
+					# assert
+					self.loader_assert(label, img, datatype)
+
+					print('load %d sample succ, jpg num is %d.' % (j, len(subdata)))
+					self.nowpos = self.nowpos + 1
+				yield img, label, name
 			except Exception as e:
+				print(e)
 				traceback.print_exc()
 				continue
-			# How to process these exceptions will be disuceesed in future.
-		self.nowpos = right
-		return img, label, name
+				# How to process these exceptions will be disuceesed in future.
 
+	def loader_assert(self, label, img, datatype='single'):
+
+		subdata = img[-1]
+		if 'single'!=datatype:
+			# subdata must be a list and its length is equal to len(files)
+			assert(isinstance(subdata,list))
+			assert(len(subdata)==len(files))
+			for i in subdata:
+				assert(isinstance(i, np.ndarray))
+				assert((1, 224, 224, 3)==i.shape)
+			
+			# label[-1] must be a list and its length is equal to len(files)
+			# and evert element in label[-1] must be a one-hot np array.
+			assert(len(files)==len(label[-1]))
+			for i in label[-1]:
+				assert(isinstance(i, np.ndarray))
+				assert((1,60)==i.shape)
+		else:
+			for i in label:
+				assert(isinstance(i, np.ndarray))
+				assert((1,60)==i.shape)
+			for i in img:
+				assert(isinstance(i, np.ndarray))
+				assert((1, 224,224,3)==i.shape)
+	
 	def shuffle(self):
 		'''
 	this function can help you shuffle datasets, after any epoch.
@@ -120,5 +183,7 @@ class DataLoader(object):
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
 	loader = DataLoader('./video_data')
-	img, label, name = loader.get_next_batch()
+
+	for img, label, name in loader.get_next_batch(batch_size=32):
+		pass#print(name)
 	loader.shuffle()

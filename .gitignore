@@ -1,5 +1,10 @@
-# npy files must be ignored
+# data files must be ignored
 *.npy
+video_data/
+*.jpg
+*.avi
+utils/checkpoints/
+log*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
