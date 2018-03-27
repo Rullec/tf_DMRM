@@ -8,6 +8,7 @@ import os
 import sys
 import traceback
 import random
+import copy
 import numpy as np
 import tensorflow as tf
 from keras.preprocessing.image import load_img
@@ -66,32 +67,26 @@ class DataLoader(object):
 		self.subdirs = subdirs
 		self.nowpos = 0
 
-	def get_next_batch(self, batch_size=2, datatype='single', simplify = 0.1):
+	def get_next_batch(self, batch_size=2, datatype='single', simplify = 0.1, val_split = 0.1):
 		'''
 	this function aims at get next batch.
 	'''
-			
-		'''		
-		if self.nowpos == len(self.subdirs):
-			return None
-		left = self.nowpos
-		right = self.nowpos + batch_size
-		if right>len(self.subdirs):
-			right = self.subdirs
-		'''
+		if 'single'!=datatype:
+			print('warining: your datatype is %s, so val_label and val_img will return None.', datatype)
 		for i in range(0, len(self.subdirs), batch_size):
 			try:
 				label, img, name = [], [], []
+				val_label, val_img, val_files = [], [], []
 				for j in range(i, i + batch_size):
 					if j==len(self.subdirs):
 						print('Attention! Now that, you have read the dataset completely.if you want to read it again, the obj will call obj.reset() automatically!')
-						yield img, label, name
+						yield img, label, None, None, name
 						self.shuffle()
 		
 					path = self.subdirs[j]
 					_, files = self.get_dirinfo(path)
-
-					# simplify - get some key image in video
+		
+					# simplify - get key images' path in video
 					new_files = []
 					for i in xrange(0, int(round(simplify * len(files)))):
 						const = int(round(1.0/simplify))
@@ -100,18 +95,25 @@ class DataLoader(object):
 						else:
 							new_files.append(files[i * const])
 					files = new_files
+					
+					# get validation data from files, remeber: we will remove the examples which are chosen.
+					tmp = len(val_files)
+					self.get_validation_data(files, val_files, val_split)
+					#print('outer: len(files)=%d, len(val_files)=%d' % (len(files), len(val_files)-tmp))
 
-					# get the ith example label
+					# get the ith training sample label and validation sample label
 					onehot = np.zeros([1,60],dtype=int)
 					onehot[0, (int)(path[-2:])-1] = 1
 					if datatype!='single':
 						label.append([np.array(onehot) for i in xrange(len(files))])
 					else:
 						[label.append(np.array(onehot)) for i in xrange(len(files))]
-					# get the ith example name
+						[val_label.append(np.array(onehot)) for i in xrange(len(val_files))]
+
+					# get the ith sample name
 					name.append(path[-20:])
 
-					# get the ith example images
+					# get the ith training sample images
 					subdata = []
 					for m in files:
 						if '.jpg'==m[-4:]:
@@ -129,12 +131,25 @@ class DataLoader(object):
 					if 'single'!=datatype:
 						img.append(subdata)
 					
+					# get validation sample in val_files
+					if 'single'== datatype:
+						for m in val_files:
+							if '.jpg'==m[-4:]:
+								try:
+									jpg = load_img(m)
+									np_image = np.expand_dims(img_to_array(jpg), axis=0)
+									val_img.append(np_image)
+								except:
+									traceback.print_exc()
+									continue
+
 					# assert
 					self.loader_assert(label, img, datatype)
+					self.loader_assert(val_label, val_img, datatype)
 
-					print('load %d sample succ, jpg num is %d.' % (j, len(subdata)))
+					print('load %d sample succ, training samples num is %d, validation samples num is %d.' % (j, len(subdata), len(val_files)-tmp))
 					self.nowpos = self.nowpos + 1
-				yield img, label, name
+				yield img, label, val_img, val_label, name
 			except Exception as e:
 				print(e)
 				traceback.print_exc()
@@ -143,6 +158,8 @@ class DataLoader(object):
 
 	def loader_assert(self, label, img, datatype='single'):
 
+		if 0==len(label) or 0==len(img):
+			raise ValueError('img and label is empty in loader_assert function!')
 		subdata = img[-1]
 		if 'single'!=datatype:
 			# subdata must be a list and its length is equal to len(files)
@@ -179,11 +196,29 @@ class DataLoader(object):
 		just forget nowpos in datasets.
 	'''
 		self.nowpos = 0
-	
+
+	def get_validation_data(self, files, val_files, val_split=0.1):
+		'''
+	this function will modify files and validation_files
+	'''
+		if val_split >=0.5 or len(files)<=1:
+			raise ValueError('your val_split in get_valdation function is larger than 0.5, or your data is not enough')
+		const = int(len(files) * val_split)
+		const = max(const, 1)
+		# we will choose 'const' files for validation
+		
+		index = random.sample(range(0, len(files)), const)
+		[val_files.append(files[i]) for i in index]
+		#print('before cut files length is ' + str(len(files)))
+		#print(files)
+		[files.remove(i) for i in val_files if i in files]
+		#print('after cut files length is ' + str(len(files)))
+		#print(val_files)
+
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
 	loader = DataLoader('./video_data')
 
-	for img, label, name in loader.get_next_batch(batch_size=32):
-		pass#print(name)
+	for img, label, val_img, val_label, name in loader.get_next_batch(batch_size=32, simplify=0.3):
+		print(len(val_label), len(val_img))
 	loader.shuffle()

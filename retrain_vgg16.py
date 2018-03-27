@@ -86,14 +86,14 @@ my_model.compile(optimizer=sgd, loss='mean_squared_error', metrics=['accuracy'])
 my_model.summary()
 
 # Create checkpoints
-checkpoint = ModelCheckpoint('./utils/checkpoints/weights.epoch{epoch:02d}-val_acc{val_acc:.2f}.hdf5', monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+checkpoint = ModelCheckpoint('./utils/checkpoints/weights.epoch{epoch:02d}-val_acc{val_acc:.5f}.hdf5', monitor='val_acc', verbose=1, save_best_only=True, mode='max')
 
 # Begin to train and load data
 loader = DataLoader('./video_data')
 
-batch_size = 1024
+batch_size = 256
 #my_model = load_model('utils/checkpoints/weights.01-0.00.hdf5')
-for data, label, name in loader.get_next_batch(batch_size, datatype='single', simplify=0.3):
+for data, label, val_data, val_label, name in loader.get_next_batch(batch_size, datatype='single', val_split=0.1, simplify=0.1):
 	#for i in data:
 	#	print(len(i))
 	#my_model.fit(x=np.expand_dims(data[0], axis=0) ,y=label[0], batch_size=32, epochs=10, validation_split=0.05, shuffle=True)
@@ -104,7 +104,9 @@ for data, label, name in loader.get_next_batch(batch_size, datatype='single', si
 	label = np.concatenate(label, axis=0)
 	data = np.concatenate(data, axis=0)
 	#print('new###########data')
+	val_label = np.concatenate(val_label, axis=0)
+	val_data = np.concatenate(val_data, axis=0)
 	#print(type(data), len(data),  data[0].shape)
 	#print('new###########label')
 	#print(type(label), len(label),  label[0].shape)
-	my_model.fit(x=data, y=label, batch_size=32, epochs=20, callbacks=[checkpoint], validation_split=0.05, shuffle=True)
+	my_model.fit(x=data, y=label, batch_size=32, epochs=20, callbacks=[checkpoint], validation_data=(val_data, val_label), shuffle=True)
