@@ -80,8 +80,9 @@ class DataLoader(object):
 				for j in range(i, i + batch_size):
 					if j==len(self.subdirs):
 						print('Attention! Now that, you have read the dataset completely.if you want to read it again, the obj will call obj.reset() automatically!')
-						yield img, label, None, None, name
+						yield img, label, val_img, val_label, name
 						self.shuffle()
+						break
 		
 					path = self.subdirs[j]
 					_, files = self.get_dirinfo(path)
@@ -97,9 +98,9 @@ class DataLoader(object):
 					files = new_files
 					
 					# get validation data from files, remeber: we will remove the examples which are chosen.
-					tmp = len(val_files)
-					self.get_validation_data(files, val_files, val_split)
-					#print('outer: len(files)=%d, len(val_files)=%d' % (len(files), len(val_files)-tmp))
+					val_files = self.get_validation_data(files, val_split)
+					print('outer: len(files)=%d, len(val_files)=%d' % (len(files), len(val_files)))
+					
 
 					# get the ith training sample label and validation sample label
 					onehot = np.zeros([1,60],dtype=int)
@@ -147,11 +148,10 @@ class DataLoader(object):
 					self.loader_assert(label, img, datatype)
 					self.loader_assert(val_label, val_img, datatype)
 
-					print('load %d sample succ, training samples num is %d, validation samples num is %d.' % (j, len(subdata), len(val_files)-tmp))
+					print('load %d sample succ, training samples num is %d, validation samples num is %d.' % (j, len(subdata), len(val_files)))
 					self.nowpos = self.nowpos + 1
 				yield img, label, val_img, val_label, name
 			except Exception as e:
-				print(e)
 				traceback.print_exc()
 				continue
 				# How to process these exceptions will be disuceesed in future.
@@ -197,10 +197,11 @@ class DataLoader(object):
 	'''
 		self.nowpos = 0
 
-	def get_validation_data(self, files, val_files, val_split=0.1):
+	def get_validation_data(self, files,  val_split=0.1):
 		'''
 	this function will modify files and validation_files
 	'''
+		val_files = []
 		if val_split >=0.5 or len(files)<=1:
 			raise ValueError('your val_split in get_valdation function is larger than 0.5, or your data is not enough')
 		const = int(len(files) * val_split)
@@ -214,11 +215,13 @@ class DataLoader(object):
 		[files.remove(i) for i in val_files if i in files]
 		#print('after cut files length is ' + str(len(files)))
 		#print(val_files)
+		return val_files
 
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
 	loader = DataLoader('./video_data')
 
 	for img, label, val_img, val_label, name in loader.get_next_batch(batch_size=32, simplify=0.3):
-		print(len(val_label), len(val_img))
+		if val_label:
+			print(len(val_label), len(val_img))
 	loader.shuffle()
