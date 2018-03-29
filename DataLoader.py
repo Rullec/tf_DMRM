@@ -48,16 +48,21 @@ class DataLoader(object):
 		dirlist.sort()
 		return dirlist, filelist
 
-	def __init__(self, datadir):
+	def __init__(self, datadir, test_split = 0.1):
 		'''
-		this function can get all subdir paths and stored them.
+		this function can get all subdir paths and stored them, and split valdation set on it randomly.
 		parameters:
 			datadir: path to datadir, such as "./video_dir"
 		'''
 		print('DataLoader start, reading data from %s.' % datadir)
 		txtpath = './utils/subdirs.txt' # the index file that stored subdir paths
 		imgpath = './utils/subfiles.txt' # the img index file
+		val_txtpath = './utils/val_subdirs.txt' # the index file of valdation data subdirs
+		#val_imgpath = './utils/val_subfiles.txt' # the index file of validation data images
+
 		subdirs, subfiles = [], []
+		valdirs, valfiles = [], []
+
 		if os.path.exists(txtpath):
 			print('subdirs.txt exists')
 			with open(txtpath, 'r') as f:
@@ -69,6 +74,28 @@ class DataLoader(object):
 			with open(txtpath, 'w') as f:
 				for i in subdirs:
 					f.write(i+'\n')
+		
+		# randomly choose the valdation subdirs and remove them from subfiles
+		if os.path.exists(val_txtpath):
+			print('val_subdirs.txt exists!')
+			with open(val_txtpath, 'r') as f:
+				index = f.readlines()
+				for i in range(0, len(index)):
+					valdirs.append(index[i][0:-1])
+					subdirs.remove(index[i][0:-1])
+					_, tmp = self.get_dirinfo(index[i][0:-1])
+					[valfiles.append(j) for j in tmp]
+
+		else: # else, we must choose some dirs from subdirs and remove them from subdirs
+			const = int(len(subdirs) * test_split)
+			valdirs = random.sample(subdirs, const)
+			with open(val_txtpath, 'w') as f:
+				for i in valdirs:
+					subdirs.remove(i)
+					f.write(i + '\n')
+					# write these imgs into valfiles
+					_, tmp = self.get_dirinfo(i)
+					[valfiles.append(j) for j in tmp]
 
 		if os.path.exists(imgpath):
 			print('subfiles.txt exists.')
@@ -82,12 +109,13 @@ class DataLoader(object):
 					_ , files = self.get_dirinfo(i)
 					for j in files:
 						subfiles.append(j)
-						f.write(j+'\n')
-
-		print('there are %d examples, %d images in %s ' % (len(subdirs), len(subfiles), datadir))
+						f.write(j + '\n')
+		
+		print('there are %d training samples, %d images, and %d testing samples, %d testing images in %s' % (len(subdirs), len(subfiles), len(valdirs), len(valfiles), datadir))
 		self.subdirs = subdirs
 		self.subfiles = subfiles
-		self.nowpos = 0
+		self.valdirs = valdirs
+		self.valfiles = valfiles
 
 	def get_validation_data(self, NeedNum):
 		'''
@@ -110,6 +138,27 @@ class DataLoader(object):
 		except Exception as e:
 			traceback.print_exc()
 		return val_img, val_label
+
+	def get_test_data(self, NeedNum=0.01):
+		NeedNum = int(len(self.valfiles)*NeedNum)
+		test_img, test_label = [], []
+		print(len(self.valfiles))
+		try:
+			test_files = random.sample(self.valfiles, NeedNum)
+			# get validation sample in val_files
+			for m in test_files:
+				jpg = load_img(m)
+				np_image = np.expand_dims(img_to_array(jpg), axis=0)
+				test_img.append(np_image)
+				onehot = np.zeros([1,60], dtype=int)
+				onehot[0, (int)(m[-10:-8])-1] = 1
+				test_label.append(onehot)
+			self.loader_assert(test_label, test_img)
+			print('get test data: %d images' % NeedNum)
+		except Exception as e:
+			traceback.print_exc()
+		return test_img, test_label
+
 	
 	def get_next_batch(self, batch_size=32, datatype='single', simplify = 0.1, val_split = 0.1):
 		'''
@@ -123,7 +172,7 @@ class DataLoader(object):
 				label, img, name = [], [], []
 				for j in range(i, i + batch_size):
 					if j==len(self.subdirs):
-						print('Attention! Now that, you have read the dataset completely.if you want to read it again, the obj will call obj.reset() automatically!')
+						print('Attention! Now that, you have read the dataset completely')
 						yield img, label, name
 						self.shuffle()
 						break
@@ -174,7 +223,6 @@ class DataLoader(object):
 					self.loader_assert(label, img, datatype)
 					
 					print('load %d sample succ, training samples num is %d' % (j, len(subdata)))
-					self.nowpos = self.nowpos + 1
 				yield img, label, name
 			except Exception as e:
 				traceback.print_exc()
@@ -210,15 +258,7 @@ class DataLoader(object):
 		'''
 	this function can help you shuffle datasets, after any epoch.
 	'''
-		self.reset()
 		random.shuffle(self.subdirs)
-
-	def reset(self):
-		'''
-	this function can 'reset' the dataset
-		just forget nowpos in datasets.
-	'''
-		self.nowpos = 0
 
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
