@@ -61,7 +61,7 @@ parameters:
 	newIm.resize((newWidth,newHeight),image.ANTIALIAS).save(arg['dst_img'],quality=arg['save_q'])
 
 def main():
-	with open('../utils/name.txt', 'r') as f :
+	with open('../utils/subfiles.txt', 'r') as f :
 		name = f.readlines()
 	num = 0
 	for i in name:

@@ -94,10 +94,11 @@ for i in xrange(0, epoch):
 	# Create checkpoints
 	checkpoint = ModelCheckpoint('./utils/checkpoints/weights.epoch'+str(i)+'-val_acc{val_acc:.5f}.hdf5', monitor='val_acc', verbose=1, save_best_only=False, mode='max')
 	
-	batch_size = 1024
-	for data, label, val_data, val_label, name in loader.get_next_batch(batch_size, datatype='single', val_split=0.05, simplify=0.2):
+	batch_size = 24
+	for data, label, name in loader.get_next_batch(batch_size, datatype='single', val_split=0.05, simplify=0.2):
 		label = np.concatenate(label, axis=0)
 		data = np.concatenate(data, axis=0)
+		val_data, val_label = loader.get_validation_data(int(len(data)/10))
 		val_label = np.concatenate(val_label, axis=0)
 		val_data = np.concatenate(val_data, axis=0)
 		my_model.fit(x=data, y=label, batch_size=16, epochs=1, callbacks=[checkpoint], validation_data=(val_data, val_label), shuffle=True)

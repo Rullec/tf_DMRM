@@ -4,7 +4,10 @@ video_data/
 *.jpg
 *.avi
 utils/checkpoints/
+
+# temp files and log files
 log*
+*tmp*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

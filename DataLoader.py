@@ -1,8 +1,10 @@
 #! /usr/bin/env python 
 # -*- coding: utf-8 -*- 
 # author: rullec
-# date: 2018/3/20
-# version: v0.3 add assert to make sure the data format	/ v0.2 -- use yield in dataloader
+# date: 2018/3/28
+# version:	v0.4 2018/3/28 move valdation data out of get_next_batch() func, it's more correct than before. 
+#			v0.3 add assert to make sure the data format
+#			v0.2 2018/3/20 -- use yield in dataloader
 
 import os
 import sys
@@ -40,6 +42,8 @@ class DataLoader(object):
 					dirlist.append(m)
 				else:
 					filelist.append(m)
+		else:
+			raise('the directory ' + path + ' is not exist!')
 		filelist.sort()
 		dirlist.sort()
 		return dirlist, filelist
@@ -52,35 +56,75 @@ class DataLoader(object):
 		'''
 		print('DataLoader start, reading data from %s.' % datadir)
 		txtpath = './utils/subdirs.txt' # the index file that stored subdir paths
-		subdirs = []
+		imgpath = './utils/subfiles.txt' # the img index file
+		subdirs, subfiles = [], []
 		if os.path.exists(txtpath):
+			print('subdirs.txt exists')
 			with open(txtpath, 'r') as f:
 				index = f.readlines()
 				for i in range(0, len(index)):
 					subdirs.append(index[i][0:-1])
 		else:
 			subdirs, _ = self.get_dirinfo(datadir)
-			with open('./utils/subdirs.txt', 'w') as f:
+			with open(txtpath, 'w') as f:
 				for i in subdirs:
 					f.write(i+'\n')
-		print('there are %d examples in %s.' % (len(subdirs), datadir))
+
+		if os.path.exists(imgpath):
+			print('subfiles.txt exists.')
+			with open(imgpath, 'r') as f:
+				index = f.readlines()
+				for i in range(0, len(index)):
+					subfiles.append(index[i][0:-1])
+		else:
+			with open(imgpath, 'w') as f:
+				for i in subdirs:
+					_ , files = self.get_dirinfo(i)
+					for j in files:
+						subfiles.append(j)
+						f.write(j+'\n')
+
+		print('there are %d examples, %d images in %s ' % (len(subdirs), len(subfiles), datadir))
 		self.subdirs = subdirs
+		self.subfiles = subfiles
 		self.nowpos = 0
 
-	def get_next_batch(self, batch_size=2, datatype='single', simplify = 0.1, val_split = 0.1):
+	def get_validation_data(self, NeedNum):
+		'''
+		get_validation_data, just given NeedNum
+		this function will return val_img, val_label
+		'''
+		val_img, val_label = [], []
+		try:
+			val_files = random.sample(self.subfiles, NeedNum)
+			# get validation sample in val_files
+			for m in val_files:
+				jpg = load_img(m)
+				np_image = np.expand_dims(img_to_array(jpg), axis=0)
+				val_img.append(np_image)
+				onehot = np.zeros([1,60], dtype=int)
+				onehot[0, (int)(m[-10:-8])-1] = 1
+				val_label.append(onehot)
+			self.loader_assert(val_label, val_img)
+			print('get valdation data: %d images' % NeedNum)
+		except Exception as e:
+			traceback.print_exc()
+		return val_img, val_label
+	
+	def get_next_batch(self, batch_size=32, datatype='single', simplify = 0.1, val_split = 0.1):
 		'''
 	this function aims at get next batch.
+	we will return validation data defaultly.
 	'''
 		if 'single'!=datatype:
 			print('warining: your datatype is %s, so val_label and val_img will return None.', datatype)
 		for i in range(0, len(self.subdirs), batch_size):
 			try:
 				label, img, name = [], [], []
-				val_label, val_img, val_files = [], [], []
 				for j in range(i, i + batch_size):
 					if j==len(self.subdirs):
 						print('Attention! Now that, you have read the dataset completely.if you want to read it again, the obj will call obj.reset() automatically!')
-						yield img, label, val_img, val_label, name
+						yield img, label, name
 						self.shuffle()
 						break
 		
@@ -97,19 +141,13 @@ class DataLoader(object):
 							new_files.append(files[i * const])
 					files = new_files
 					
-					# get validation data from files, remeber: we will remove the examples which are chosen.
-					val_files = self.get_validation_data(files, val_split)
-					print('outer: len(files)=%d, len(val_files)=%d' % (len(files), len(val_files)))
-					
-
-					# get the ith training sample label and validation sample label
-					onehot = np.zeros([1,60],dtype=int)
-					onehot[0, (int)(path[-2:])-1] = 1
+					# get the ith training sample label 
+					onehot = np.zeros([1,60], dtype=int)
+					onehot[0, (int)(path[-2:]) - 1 ] = 1
 					if datatype!='single':
 						label.append([np.array(onehot) for i in xrange(len(files))])
 					else:
 						[label.append(np.array(onehot)) for i in xrange(len(files))]
-						[val_label.append(np.array(onehot)) for i in xrange(len(val_files))]
 
 					# get the ith sample name
 					name.append(path[-20:])
@@ -131,26 +169,13 @@ class DataLoader(object):
 								continue
 					if 'single'!=datatype:
 						img.append(subdata)
-					
-					# get validation sample in val_files
-					if 'single'== datatype:
-						for m in val_files:
-							if '.jpg'==m[-4:]:
-								try:
-									jpg = load_img(m)
-									np_image = np.expand_dims(img_to_array(jpg), axis=0)
-									val_img.append(np_image)
-								except:
-									traceback.print_exc()
-									continue
 
 					# assert
 					self.loader_assert(label, img, datatype)
-					self.loader_assert(val_label, val_img, datatype)
-
-					print('load %d sample succ, training samples num is %d, validation samples num is %d.' % (j, len(subdata), len(val_files)))
+					
+					print('load %d sample succ, training samples num is %d' % (j, len(subdata)))
 					self.nowpos = self.nowpos + 1
-				yield img, label, val_img, val_label, name
+				yield img, label, name
 			except Exception as e:
 				traceback.print_exc()
 				continue
@@ -164,14 +189,12 @@ class DataLoader(object):
 		if 'single'!=datatype:
 			# subdata must be a list and its length is equal to len(files)
 			assert(isinstance(subdata,list))
-			assert(len(subdata)==len(files))
 			for i in subdata:
 				assert(isinstance(i, np.ndarray))
 				assert((1, 224, 224, 3)==i.shape)
 			
 			# label[-1] must be a list and its length is equal to len(files)
-			# and evert element in label[-1] must be a one-hot np array.
-			assert(len(files)==len(label[-1]))
+			# and every element in label[-1] must be a one-hot np array.
 			for i in label[-1]:
 				assert(isinstance(i, np.ndarray))
 				assert((1,60)==i.shape)
@@ -197,31 +220,11 @@ class DataLoader(object):
 	'''
 		self.nowpos = 0
 
-	def get_validation_data(self, files,  val_split=0.1):
-		'''
-	this function will modify files and validation_files
-	'''
-		val_files = []
-		if val_split >=0.5 or len(files)<=1:
-			raise ValueError('your val_split in get_valdation function is larger than 0.5, or your data is not enough')
-		const = int(len(files) * val_split)
-		const = max(const, 1)
-		# we will choose 'const' files for validation
-		
-		index = random.sample(range(0, len(files)), const)
-		[val_files.append(files[i]) for i in index]
-		#print('before cut files length is ' + str(len(files)))
-		#print(files)
-		[files.remove(i) for i in val_files if i in files]
-		#print('after cut files length is ' + str(len(files)))
-		#print(val_files)
-		return val_files
-
 if __name__ =='__main__':
 	'DataLoader.py test start!!!'
 	loader = DataLoader('./video_data')
 
-	for img, label, val_img, val_label, name in loader.get_next_batch(batch_size=32, simplify=0.3):
-		if val_label:
-			print(len(val_label), len(val_img))
+	for img, label, name in loader.get_next_batch(batch_size=32, simplify=0.1):
+		print(len(img), len(label))
+	img, label = loader.get_validation_data(100)
 	loader.shuffle()
