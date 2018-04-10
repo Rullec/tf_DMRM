@@ -8,6 +8,7 @@ utils/checkpoints/
 # temp files and log files
 log*
 *tmp*
+*.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
